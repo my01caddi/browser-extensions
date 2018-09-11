@@ -1,5 +1,3 @@
-import { DiffPart } from '@sourcegraph/codeintellify'
-
 import { GitHubBlobUrl, GitHubMode, GitHubPullUrl, GitHubRepositoryUrl, GitHubURL } from '.'
 import { CodeCell, DiffRepoRev, DiffResolvedRevSpec, MaybeDiffSpec } from '../../shared/repo'
 import { parseHash } from '../../shared/util/url'
@@ -62,8 +60,8 @@ export function createBlobAnnotatorMount(fileContainer: HTMLElement, isBase?: bo
 /**
  * Creates the mount element for the CodeViewToolbar.
  */
-export function createCodeViewToolbarMount(fileContainer: HTMLElement, part?: DiffPart): HTMLElement {
-    const className = 'sourcegraph-app-annotator' + (part === 'base' ? '-base' : '')
+export function createCodeViewToolbarMount(fileContainer: HTMLElement): HTMLElement {
+    const className = 'sourcegraph-app-annotator'
     const existingMount = fileContainer.querySelector('.' + className) as HTMLElement
     if (existingMount) {
         return existingMount

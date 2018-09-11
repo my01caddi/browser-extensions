@@ -16,7 +16,7 @@ import { toPrettyBlobURL } from '@sourcegraph/codeintellify/lib/url'
 import * as React from 'react'
 import { render } from 'react-dom'
 import { merge, Observable, of, Subject, Subscription } from 'rxjs'
-import { filter, map, withLatestFrom } from 'rxjs/operators'
+import { filter, map, switchMap, withLatestFrom } from 'rxjs/operators'
 
 import { createJumpURLFetcher } from '../../shared/backend/lsp'
 import { lspViaAPIXlang } from '../../shared/backend/lsp'
@@ -224,6 +224,14 @@ export interface ResolvedCodeView extends CodeViewWithOutSelector {
     codeView: HTMLElement
 }
 
+/**
+ * Cast a Node to an HTMLElement if it has a classList. This should not be used
+ * if you need 100% confidence the Node is an HTMLElement.
+ */
+function naiveCheckIsHTMLElement(node: Node): node is HTMLElement {
+    return !!(node as any).classList
+}
+
 function findCodeViews(codeHost: CodeHost): Observable<ResolvedCodeView> {
     const codeViewsFromList = new Observable<ResolvedCodeView>(observer => {
         if (!codeHost.codeViews) {
@@ -251,7 +259,71 @@ function findCodeViews(codeHost: CodeHost): Observable<ResolvedCodeView> {
         }
     })
 
-    return merge(codeViewsFromList, codeViewsFromResolver)
+    const possibleLazyLoadedCodeViews = new Subject<HTMLElement>()
+
+    const mutationObserver = new MutationObserver(mutations => {
+        for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+                if (!naiveCheckIsHTMLElement(node)) {
+                    return
+                }
+
+                possibleLazyLoadedCodeViews.next(node)
+            }
+        }
+    })
+
+    mutationObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: false,
+        characterData: false,
+    })
+
+    const lazilyLoadedCodeViewsFromCodeViewsList: Observable<ResolvedCodeView> = possibleLazyLoadedCodeViews.pipe(
+        filter(() => !!codeHost.codeViews),
+        map(elem => ({ codeView: elem, info: codeHost.codeViews!.find(({ selector }) => elem.matches(selector)) })),
+        filter(propertyIsDefined('info')),
+        map(({ codeView, info }) => ({ ...info, codeView }))
+    )
+
+    const lazilyLoadedCodeViewsFromResolver: Observable<ResolvedCodeView> = possibleLazyLoadedCodeViews.pipe(
+        filter(() => !!codeHost.codeViewResolver),
+        map(elem => ({ codeView: elem, info: codeHost.codeViews!.find(({ selector }) => elem.matches(selector)) })),
+        filter(propertyIsDefined('info')),
+        map(({ codeView, info }) => ({ ...info, codeView }))
+    )
+
+    const lazilyLoadedCodeViews = merge(lazilyLoadedCodeViewsFromCodeViewsList, lazilyLoadedCodeViewsFromResolver).pipe(
+        switchMap(
+            ({ codeView, ...rest }) =>
+                new Observable<ResolvedCodeView>(observer => {
+                    const intersectionObserver = new IntersectionObserver(
+                        entries => {
+                            for (const entry of entries) {
+                                // `entry` is an `IntersectionObserverEntry`,
+                                // which has
+                                // [isIntersecting](https://developer.mozilla.org/en-US/docs/Web/API/IntersectionObserverEntry/isIntersecting#Browser_compatibility)
+                                // as a prop, but TS complains that it does not
+                                // exist.
+                                if ((entry as any).isIntersecting) {
+                                    observer.next({ codeView, ...rest })
+                                }
+                            }
+                        },
+                        {
+                            rootMargin: '200px',
+                            threshold: 0,
+                        }
+                    )
+                    intersectionObserver.observe(codeView)
+                })
+        )
+    )
+
+    return merge(codeViewsFromList, codeViewsFromResolver, lazilyLoadedCodeViews).pipe(
+        filter(({ codeView }) => !codeView.classList.contains('sg-mounted'))
+    )
 }
 
 function handleCodeHost(codeHost: CodeHost): Subscription {
@@ -273,6 +345,8 @@ function handleCodeHost(codeHost: CodeHost): Subscription {
                     resolveContext,
                     adjustPosition,
                 })
+
+                codeView.classList.add('sg-mounted')
 
                 if (!getToolbarMount) {
                     return
@@ -299,9 +373,14 @@ function handleCodeHost(codeHost: CodeHost): Subscription {
 
 function injectCodeIntelligenceToCodeHosts(codeHosts: CodeHost[]): void {
     for (const codeHost of codeHosts) {
-        if (codeHost.check()) {
-            handleCodeHost(codeHost)
-        }
+        const check = codeHost.check()
+        const checking = check instanceof Promise ? check : Promise.resolve(check)
+
+        checking.then(isCodeHost => {
+            if (isCodeHost) {
+                handleCodeHost(codeHost)
+            }
+        })
     }
 }
 
