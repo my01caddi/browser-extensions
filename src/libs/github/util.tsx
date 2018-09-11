@@ -1,3 +1,5 @@
+import { DiffPart } from '@sourcegraph/codeintellify'
+
 import { GitHubBlobUrl, GitHubMode, GitHubPullUrl, GitHubRepositoryUrl, GitHubURL } from '.'
 import { CodeCell, DiffRepoRev, DiffResolvedRevSpec, MaybeDiffSpec } from '../../shared/repo'
 import { parseHash } from '../../shared/util/url'
@@ -50,6 +52,46 @@ export function createBlobAnnotatorMount(fileContainer: HTMLElement, isBase?: bo
         const note = fileContainer.querySelector('.show-file-notes')
         if (!note || !note.parentNode) {
             throw new Error('cannot locate BlobAnnotator injection site')
+        }
+        note.parentNode.insertBefore(mountEl, note.nextSibling)
+    }
+
+    return mountEl
+}
+
+/**
+ * Creates the mount element for the CodeViewToolbar.
+ */
+export function createCodeViewToolbarMount(fileContainer: HTMLElement, part?: DiffPart): HTMLElement {
+    const className = 'sourcegraph-app-annotator' + (part === 'base' ? '-base' : '')
+    const existingMount = fileContainer.querySelector('.' + className) as HTMLElement
+    if (existingMount) {
+        return existingMount
+    }
+
+    const mountEl = document.createElement('div')
+    mountEl.style.display = 'inline-flex'
+    mountEl.style.verticalAlign = 'middle'
+    mountEl.style.alignItems = 'center'
+    mountEl.className = className
+
+    const fileActions = fileContainer.querySelector('.file-actions')
+    if (!fileActions) {
+        throw new Error(
+            "File actions not found. Make sure you aren't trying to create " +
+                "a toolbar mount for a code snippet that shouldn't have one"
+        )
+    }
+
+    const buttonGroup = fileActions.querySelector('.BtnGroup')
+    if (buttonGroup && buttonGroup.parentNode && !fileContainer.querySelector('.show-file-notes')) {
+        // blob view
+        buttonGroup.parentNode.insertBefore(mountEl, buttonGroup)
+    } else {
+        // commit & pull request view
+        const note = fileContainer.querySelector('.show-file-notes')
+        if (!note || !note.parentNode) {
+            throw new Error('cannot find toolbar mount location')
         }
         note.parentNode.insertBefore(mountEl, note.nextSibling)
     }

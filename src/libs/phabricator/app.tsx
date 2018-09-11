@@ -1,5 +1,5 @@
 import { featureFlags } from '../../shared/util/featureFlags'
-import { injectCodeIntelligence } from '../code_intelligence/inject'
+import { injectCodeIntelligence } from '../code_intelligence'
 import { phabCodeViews } from './code_views'
 import { injectPhabricatorBlobAnnotators } from './inject_old'
 import { expanderListen, javelinPierce, metaClickOverride, setupPageLoadListener } from './util'

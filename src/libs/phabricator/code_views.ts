@@ -2,7 +2,7 @@ import { AdjustmentDirection, DiffPart, PositionAdjuster } from '@sourcegraph/co
 import { map } from 'rxjs/operators'
 import { Position } from 'vscode-languageserver-types'
 import { fetchBlobContentLines } from '../../shared/repo/backend'
-import { CodeView } from '../code_intelligence/inject'
+import { CodeView } from '../code_intelligence'
 import { diffDomFunctions, diffusionDOMFns } from './dom_functions'
 import { resolveDiffFileInfo, resolveDiffusionFileInfo } from './file_info'
 import { convertSpacesToTabs, spacesToTabsAdjustment } from './index'

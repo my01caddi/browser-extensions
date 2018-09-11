@@ -15,13 +15,47 @@ import { HoverMerged } from '@sourcegraph/codeintellify/lib/types'
 import { toPrettyBlobURL } from '@sourcegraph/codeintellify/lib/url'
 import * as React from 'react'
 import { render } from 'react-dom'
-import { Observable, of, Subject, Subscription } from 'rxjs'
+import { merge, Observable, of, Subject, Subscription } from 'rxjs'
 import { filter, map, withLatestFrom } from 'rxjs/operators'
 
 import { createJumpURLFetcher } from '../../shared/backend/lsp'
 import { lspViaAPIXlang } from '../../shared/backend/lsp'
 import { ButtonProps, CodeViewToolbar } from '../../shared/components/CodeViewToolbar'
 import { eventLogger, sourcegraphUrl } from '../../shared/util/context'
+
+/**
+ * Defines a type of code view a given code host can have. It tells us how to
+ * look for the code view and how to do certain things when we find it.
+ */
+export interface CodeView {
+    /** A selector used by `document.querySelectorAll` to find the code view. */
+    selector: string
+    /** The DOMFunctions for the code view. */
+    dom: DOMFunctions
+    /** Finds or creates a DOM element where we should inject the `CodeViewToolbar`. */
+    getToolbarMount?: (codeView: HTMLElement, part?: DiffPart) => HTMLElement
+    /**
+     * Resolves the file info for a given code view. It returns an observable
+     * because some code hosts need to resolve this asynchronously. The
+     * observable should only emit once.
+     */
+    resolveFileInfo: (codeView: HTMLElement) => Observable<FileInfo>
+    /**
+     * In some situations, we need to be able to adjust the position going into
+     * and coming out of codeintellify. For example, Phabricator converts tabs
+     * to spaces in it's DOM.
+     */
+    adjustPosition?: PositionAdjuster
+    /** Props for styling the buttons in the `CodeViewToolbar`. */
+    toolbarButtonProps?: ButtonProps
+}
+
+export type CodeViewWithOutSelector = Pick<CodeView, Exclude<keyof CodeView, 'selector'>>
+
+export interface CodeViewResolver {
+    selector: string
+    resolveCodeView: (elem: HTMLElement) => CodeViewWithOutSelector
+}
 
 /** Information for adding code intelligence to code views on arbitrary code hosts. */
 export interface CodeHost {
@@ -32,7 +66,13 @@ export interface CodeHost {
     /**
      * The list of types of code views to try to annotate.
      */
-    codeViews: CodeView[]
+    codeViews?: CodeView[]
+
+    /**
+     * Resolve `CodeView`s from the DOM. This is useful when each code view type
+     * doesn't have a distinct selector for
+     */
+    codeViewResolver?: CodeViewResolver
 }
 
 export interface FileInfo {
@@ -76,31 +116,6 @@ export interface FileInfo {
 
     headHasFileContents?: boolean
     baseHasFileContents?: boolean
-}
-
-/**
- * Defines a type of code view a given code host can have. It tells us how to
- * look for the code view and how to do certain things when we find it.
- */
-export interface CodeView {
-    /** A selector used by `document.querySelectorAll` to find the code view. */
-    selector: string
-    /** The DOMFunctions for the code view. */
-    dom: DOMFunctions
-    /** Finds or creates a DOM element where we should inject the `CodeViewToolbar`. */
-    getToolbarMount?: (codeView: HTMLElement, part?: DiffPart) => HTMLElement
-    /** Resolves the file info for a given code view. It returns an observable
-     * because some code hosts need to resolve this asynchronously. The
-     * observable should only emit once.
-     */
-    resolveFileInfo: (codeView: HTMLElement) => Observable<FileInfo>
-    /** In some situations, we need to be able to adjust the position going into
-     * and coming out of codeintellify. For example, Phabricator converts tabs
-     * to spaces in it's DOM.
-     */
-    adjustPosition?: PositionAdjuster
-    /** Props for styling the buttons in the `CodeViewToolbar`. */
-    toolbarButtonProps?: ButtonProps
 }
 
 /**
@@ -196,26 +211,45 @@ function initCodeIntelligence(codeHost: CodeHost): { hoverifier: Hoverifier } {
  * ResolvedCodeView attaches an actual code view DOM element that was found on
  * the page to the CodeView type being passed around by this file.
  */
-export interface ResolvedCodeView extends CodeView {
+export interface ResolvedCodeView extends CodeViewWithOutSelector {
     /** The code view DOM element. */
     codeView: HTMLElement
 }
 
-function findCodeViews(codeViewInfos: CodeView[]): Observable<ResolvedCodeView> {
-    return new Observable<ResolvedCodeView>(observer => {
-        for (const info of codeViewInfos) {
-            const elements = document.querySelectorAll<HTMLElement>(info.selector)
+function findCodeViews(codeHost: CodeHost): Observable<ResolvedCodeView> {
+    const codeViewsFromList = new Observable<ResolvedCodeView>(observer => {
+        if (!codeHost.codeViews) {
+            return
+        }
+
+        for (const { selector, ...info } of codeHost.codeViews) {
+            const elements = document.querySelectorAll<HTMLElement>(selector)
             for (const codeView of elements) {
                 observer.next({ ...info, codeView })
             }
         }
     })
+
+    const codeViewsFromResolver = new Observable<ResolvedCodeView>(observer => {
+        if (!codeHost.codeViewResolver) {
+            return
+        }
+
+        const elements = document.querySelectorAll<HTMLElement>(codeHost.codeViewResolver.selector)
+        for (const elem of elements) {
+            const info = codeHost.codeViewResolver.resolveCodeView(elem)
+
+            observer.next({ ...info, codeView: elem })
+        }
+    })
+
+    return merge(codeViewsFromList, codeViewsFromResolver)
 }
 
 export function injectCodeIntelligence(codeHostInfo: CodeHost): Subscription {
     const { hoverifier } = initCodeIntelligence(codeHostInfo)
 
-    return findCodeViews(codeHostInfo.codeViews).subscribe(
+    return findCodeViews(codeHostInfo).subscribe(
         ({ codeView, dom, resolveFileInfo, adjustPosition, getToolbarMount, toolbarButtonProps }) =>
             resolveFileInfo(codeView).subscribe(info => {
                 const resolveContext: ContextResolver = ({ part }) => ({

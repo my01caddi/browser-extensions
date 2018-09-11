@@ -2,7 +2,7 @@ import '../../config/polyfill'
 
 import { setSourcegraphUrl } from '../../shared/util/context'
 import { featureFlags } from '../../shared/util/featureFlags'
-import { injectCodeIntelligence } from '../code_intelligence/inject'
+import { injectCodeIntelligence } from '../code_intelligence'
 import { getPhabricatorCSS, getSourcegraphURLFromConduit } from './backend'
 import { phabCodeViews } from './code_views'
 import { injectPhabricatorBlobAnnotators } from './inject_old'
