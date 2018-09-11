@@ -4,7 +4,6 @@ import { setSourcegraphUrl } from '../../shared/util/context'
 import { featureFlags } from '../../shared/util/featureFlags'
 import { injectCodeIntelligence } from '../code_intelligence'
 import { getPhabricatorCSS, getSourcegraphURLFromConduit } from './backend'
-import { phabCodeViews } from './code_views'
 import { injectPhabricatorBlobAnnotators } from './inject_old'
 import { expanderListen, metaClickOverride, setupPageLoadListener } from './util'
 
@@ -19,7 +18,7 @@ function injectModules(): void {
         .isEnabled('newTooltips')
         .then(enabled => {
             if (enabled) {
-                injectCodeIntelligence({ name: 'phabricator', codeViews: phabCodeViews })
+                injectCodeIntelligence()
                 return
             }
 

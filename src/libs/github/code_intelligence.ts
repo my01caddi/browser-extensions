@@ -28,7 +28,18 @@ const codeViewResolver: CodeViewResolver = {
     resolveCodeView,
 }
 
+function checkIsGithub(): boolean {
+    const href = window.location.href
+
+    const isGithub = /^https?:\/\/(www.)?github.com/.test(href)
+    const ogSiteName = document.head.querySelector(`meta[property='og:site_name']`) as HTMLMetaElement
+    const isGitHubEnterprise = ogSiteName ? ogSiteName.content === 'GitHub Enterprise' : false
+
+    return isGithub || isGitHubEnterprise
+}
+
 export const githubCodeHost: CodeHost = {
     name: 'github',
     codeViewResolver,
+    check: checkIsGithub,
 }

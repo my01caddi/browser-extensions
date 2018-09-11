@@ -22,6 +22,8 @@ import { createJumpURLFetcher } from '../../shared/backend/lsp'
 import { lspViaAPIXlang } from '../../shared/backend/lsp'
 import { ButtonProps, CodeViewToolbar } from '../../shared/components/CodeViewToolbar'
 import { eventLogger, sourcegraphUrl } from '../../shared/util/context'
+import { githubCodeHost } from '../github/code_intelligence'
+import { phabricatorCodeHost } from '../phabricator/code_intelligence'
 
 /**
  * Defines a type of code view a given code host can have. It tells us how to
@@ -63,6 +65,7 @@ export interface CodeHost {
      * The name of the code host. This will be added as a className to the overlay mount.
      */
     name: string
+
     /**
      * The list of types of code views to try to annotate.
      */
@@ -73,6 +76,12 @@ export interface CodeHost {
      * doesn't have a distinct selector for
      */
     codeViewResolver?: CodeViewResolver
+
+    /**
+     * Checks to see if the current context the code is running in is within
+     * the given code host.
+     */
+    check: () => Promise<boolean> | boolean
 }
 
 export interface FileInfo {
@@ -95,7 +104,6 @@ export interface FileInfo {
      * The revision the code view is at. If a `baseRev` is provided, this value is treated as the head rev.
      */
     rev?: string
-
     /**
      * The repo bath for the BASE side of a diff. This is useful for Phabricator
      * staging areas since they are separate repos.
@@ -246,10 +254,10 @@ function findCodeViews(codeHost: CodeHost): Observable<ResolvedCodeView> {
     return merge(codeViewsFromList, codeViewsFromResolver)
 }
 
-export function injectCodeIntelligence(codeHostInfo: CodeHost): Subscription {
-    const { hoverifier } = initCodeIntelligence(codeHostInfo)
+function handleCodeHost(codeHost: CodeHost): Subscription {
+    const { hoverifier } = initCodeIntelligence(codeHost)
 
-    return findCodeViews(codeHostInfo).subscribe(
+    return findCodeViews(codeHost).subscribe(
         ({ codeView, dom, resolveFileInfo, adjustPosition, getToolbarMount, toolbarButtonProps }) =>
             resolveFileInfo(codeView).subscribe(info => {
                 const resolveContext: ContextResolver = ({ part }) => ({
@@ -287,4 +295,18 @@ export function injectCodeIntelligence(codeHostInfo: CodeHost): Subscription {
                 )
             })
     )
+}
+
+function injectCodeIntelligenceToCodeHosts(codeHosts: CodeHost[]): void {
+    for (const codeHost of codeHosts) {
+        if (codeHost.check()) {
+            handleCodeHost(codeHost)
+        }
+    }
+}
+
+export function injectCodeIntelligence(): void {
+    const codeHosts: CodeHost[] = [githubCodeHost, phabricatorCodeHost]
+
+    injectCodeIntelligenceToCodeHosts(codeHosts)
 }

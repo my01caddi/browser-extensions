@@ -1,6 +1,4 @@
 import { featureFlags } from '../../shared/util/featureFlags'
-import { injectCodeIntelligence } from '../code_intelligence'
-import { phabCodeViews } from './code_views'
 import { injectPhabricatorBlobAnnotators } from './inject_old'
 import { expanderListen, javelinPierce, metaClickOverride, setupPageLoadListener } from './util'
 
@@ -27,7 +25,6 @@ function injectModules(): void {
         .isEnabled('newTooltips')
         .then(enabled => {
             if (enabled) {
-                injectCodeIntelligence({ codeViews: phabCodeViews, name: 'phabricator' })
                 return
             }
 
