@@ -1005,9 +1005,9 @@
   version "4.14.115"
   resolved "https://registry.yarnpkg.com/@types/lodash/-/lodash-4.14.115.tgz#54d171b2ce12c058742443b5f6754760f701b8f9"
 
-"@types/marked@0.4.0":
-  version "0.4.0"
-  resolved "https://registry.yarnpkg.com/@types/marked/-/marked-0.4.0.tgz#057a6165703e7419217f8ffc6887747f980b6315"
+"@types/marked@0.4.1":
+  version "0.4.1"
+  resolved "https://registry.yarnpkg.com/@types/marked/-/marked-0.4.1.tgz#6595701c4d0dfde9d04894d3be04b8a97a49e0d7"
 
 "@types/mermaid@8.0.0":
   version "8.0.0"
