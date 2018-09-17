@@ -15,8 +15,8 @@ import { HoverMerged } from '@sourcegraph/codeintellify/lib/types'
 import { toPrettyBlobURL } from '@sourcegraph/codeintellify/lib/url'
 import * as React from 'react'
 import { render } from 'react-dom'
-import { merge, Observable, of, Subject, Subscription } from 'rxjs'
-import { filter, map, mergeMap, switchMap, tap, withLatestFrom } from 'rxjs/operators'
+import { Observable, of, Subject, Subscription } from 'rxjs'
+import { filter, map, mergeMap, withLatestFrom } from 'rxjs/operators'
 
 import { createJumpURLFetcher } from '../../shared/backend/lsp'
 import { lspViaAPIXlang } from '../../shared/backend/lsp'
@@ -24,6 +24,7 @@ import { ButtonProps, CodeViewToolbar } from '../../shared/components/CodeViewTo
 import { eventLogger, sourcegraphUrl } from '../../shared/util/context'
 import { githubCodeHost } from '../github/code_intelligence'
 import { phabricatorCodeHost } from '../phabricator/code_intelligence'
+import { findCodeViews } from './code_views'
 
 /**
  * Defines a type of code view a given code host can have. It tells us how to
@@ -229,144 +230,11 @@ export interface ResolvedCodeView extends CodeViewWithOutSelector {
     codeView: HTMLElement
 }
 
-/**
- * Cast a Node to an HTMLElement if it has a classList. This should not be used
- * if you need 100% confidence the Node is an HTMLElement.
- */
-// function naiveCheckIsHTMLElement(node: Node): node is HTMLElement {
-// return !!(node as any).classList
-// }
-
-const findCodeViews = () => (codeHosts: Observable<CodeHost>): Observable<ResolvedCodeView> => {
-    const codeViewsFromList: Observable<ResolvedCodeView> = codeHosts.pipe(
-        filter(propertyIsDefined('codeViews')),
-        switchMap(({ codeViews }) =>
-            of(...codeViews).pipe(
-                map(({ selector, ...info }) => ({
-                    info,
-                    matches: document.querySelectorAll<HTMLElement>(selector),
-                }))
-            )
-        ),
-        switchMap(({ info, matches }) =>
-            of(...matches).pipe(
-                map(codeView => ({
-                    ...info,
-                    codeView,
-                }))
-            )
-        )
-    )
-
-    const codeViewsFromResolver: Observable<ResolvedCodeView> = codeHosts.pipe(
-        filter(propertyIsDefined('codeViewResolver')),
-        map(({ codeViewResolver: { selector, resolveCodeView } }) => ({
-            resolveCodeView,
-            matches: document.querySelectorAll<HTMLElement>(selector),
-        })),
-        switchMap(({ resolveCodeView, matches }) =>
-            of(...matches).pipe(
-                map(codeView => ({
-                    ...resolveCodeView(codeView),
-                    codeView,
-                }))
-            )
-        )
-    )
-
-    // const codeViewsFromResolver = new Observable<ResolvedCodeView>(observer => {
-    // if (!codeHost.codeViewResolver) {
-    // return
-    // }
-    //
-    // const elements = document.querySelectorAll<HTMLElement>(codeHost.codeViewResolver.selector)
-    // for (const elem of elements) {
-    // const info = codeHost.codeViewResolver.resolveCodeView(elem)
-    //
-    // observer.next({ ...info, codeView: elem })
-    // }
-    // })
-    //
-    // const possibleLazyLoadedCodeViews = new Subject<HTMLElement>()
-    //
-    // const mutationObserver = new MutationObserver(mutations => {
-    // for (const mutation of mutations) {
-    // console.log('mut', mutation)
-    // for (const node of mutation.addedNodes) {
-    // if (!naiveCheckIsHTMLElement(node)) {
-    // return
-    // }
-    //
-    // possibleLazyLoadedCodeViews.next(node)
-    // }
-    // }
-    // })
-    //
-    // mutationObserver.observe(document.body, {
-    // // childList: true,
-    // subtree: true,
-    // attributes: false,
-    // characterData: false,
-    // })
-    //
-    // const lazilyLoadedCodeViewsFromCodeViewsList: Observable<ResolvedCodeView> = possibleLazyLoadedCodeViews.pipe(
-    // filter(() => !!codeHost.codeViews),
-    // map(elem => ({ codeView: elem, info: codeHost.codeViews!.find(({ selector }) => elem.matches(selector)) })),
-    // filter(propertyIsDefined('info')),
-    // map(({ codeView, info }) => ({ ...info, codeView }))
-    // )
-    //
-    // const lazilyLoadedCodeViewsFromResolver: Observable<ResolvedCodeView> = possibleLazyLoadedCodeViews.pipe(
-    // filter(() => !!codeHost.codeViewResolver),
-    // map(elem => ({ codeView: elem, info: codeHost.codeViews!.find(({ selector }) => elem.matches(selector)) })),
-    // filter(propertyIsDefined('info')),
-    // map(({ codeView, info }) => ({ ...info, codeView }))
-    // )
-    //
-    // const lazilyLoadedCodeViews = merge(lazilyLoadedCodeViewsFromCodeViewsList, lazilyLoadedCodeViewsFromResolver).pipe(
-    // switchMap(
-    // ({ codeView, ...rest }) =>
-    // new Observable<ResolvedCodeView>(observer => {
-    // const intersectionObserver = new IntersectionObserver(
-    // entries => {
-    // for (const entry of entries) {
-    // // `entry` is an `IntersectionObserverEntry`,
-    // // which has
-    // // [isIntersecting](https://developer.mozilla.org/en-US/docs/Web/API/IntersectionObserverEntry/isIntersecting#Browser_compatibility)
-    // // as a prop, but TS complains that it does not
-    // // exist.
-    // console.log('hello', entry)
-    // if ((entry as any).isIntersecting) {
-    // observer.next({ codeView, ...rest })
-    // }
-    // }
-    // },
-    // {
-    // rootMargin: '200px',
-    // threshold: 0,
-    // }
-    // )
-    // intersectionObserver.observe(codeView)
-    // })
-    // )
-    // )
-
-    // return merge(codeViewsFromList, codeViewsFromResolver, lazilyLoadedCodeViews).pipe(
-    // filter(({ codeView }) => !codeView.classList.contains('sg-mounted'))
-    // )
-    //
-    return merge(codeViewsFromList, codeViewsFromResolver).pipe(
-        filter(({ codeView }) => !codeView.classList.contains('sg-mounted'))
-    )
-}
-
 function handleCodeHost(codeHost: CodeHost): Subscription {
     const { hoverifier } = initCodeIntelligence(codeHost)
-    console.log('finding code views')
 
-    return of(codeHost)
+    return findCodeViews(codeHost)
         .pipe(
-            findCodeViews(),
             mergeMap(({ codeView, resolveFileInfo, ...rest }) =>
                 resolveFileInfo(codeView).pipe(map(info => ({ info, codeView, ...rest })))
             )
