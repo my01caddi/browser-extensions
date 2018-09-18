@@ -138,7 +138,6 @@ export interface FileInfo {
  * @param codeHost
  */
 function initCodeIntelligence(codeHost: CodeHost): { hoverifier: Hoverifier } {
-    console.log('INIT code intel')
     /** Emits when the go to definition button was clicked */
     const goToDefinitionClicks = new Subject<MouseEvent>()
     const nextGoToDefinitionClick = (event: MouseEvent) => goToDefinitionClicks.next(event)
@@ -279,25 +278,20 @@ function handleCodeHost(codeHost: CodeHost): Subscription {
         })
 }
 
-function injectCodeIntelligenceToCodeHosts(codeHosts: CodeHost[]): void {
+async function injectCodeIntelligenceToCodeHosts(codeHosts: CodeHost[]): Promise<void> {
     for (const codeHost of codeHosts) {
         const check = codeHost.check()
         const checking = check instanceof Promise ? check : Promise.resolve(check)
 
-        checking
-            .then(isCodeHost => {
-                if (isCodeHost) {
-                    handleCodeHost(codeHost)
-                }
-            })
-            .catch(err => {
-                /* noop */
-            })
+        const isCodeHost = await checking
+        if (isCodeHost) {
+            window.requestAnimationFrame(() => handleCodeHost(codeHost))
+        }
     }
 }
 
-export function injectCodeIntelligence(): void {
+export async function injectCodeIntelligence(): Promise<void> {
     const codeHosts: CodeHost[] = [githubCodeHost, phabricatorCodeHost]
 
-    injectCodeIntelligenceToCodeHosts(codeHosts)
+    await injectCodeIntelligenceToCodeHosts(codeHosts)
 }
