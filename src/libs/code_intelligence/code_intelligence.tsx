@@ -233,8 +233,11 @@ export interface ResolvedCodeView extends CodeViewWithOutSelector {
 function handleCodeHost(codeHost: CodeHost): Subscription {
     const { hoverifier } = initCodeIntelligence(codeHost)
 
-    return findCodeViews(codeHost)
+    // return findCodeViews(codeHost)
+    // .pipe(
+    return of(document.body)
         .pipe(
+            findCodeViews(codeHost),
             mergeMap(({ codeView, resolveFileInfo, ...rest }) =>
                 resolveFileInfo(codeView).pipe(map(info => ({ info, codeView, ...rest })))
             )
