@@ -14,7 +14,7 @@ function naiveCheckIsHTMLElement(node: Node): node is HTMLElement {
 /**
  * Emits a ResolvedCodeView when it's DOM element is on or about to be on the page.
  */
-const emitWhenIntersecting = () => {
+const emitWhenIntersecting = (margin: number) => {
     const codeViewStash = new Map<HTMLElement, ResolvedCodeView>()
 
     const intersectingElements = new Subject<HTMLElement>()
@@ -33,7 +33,7 @@ const emitWhenIntersecting = () => {
             }
         },
         {
-            rootMargin: '200px',
+            rootMargin: `${margin}px`,
             threshold: 0,
         }
     )
@@ -55,7 +55,9 @@ const emitWhenIntersecting = () => {
  * findCodeViews finds all the code views on a page given a CodeHost. It emits code views
  * that are lazily loaded as well.
  */
-export const findCodeViews = (codeHost: CodeHost, recursive = true) => (containers: Observable<Element>) => {
+export const findCodeViews = (codeHost: CodeHost, watchChildrenModifications = true) => (
+    containers: Observable<Element>
+) => {
     const codeViewsFromList: Observable<ResolvedCodeView> = containers.pipe(
         filter(() => !!codeHost.codeViews),
         mergeMap(container =>
@@ -94,7 +96,7 @@ export const findCodeViews = (codeHost: CodeHost, recursive = true) => (containe
 
     const obs = [codeViewsFromList, codeViewsFromResolver]
 
-    if (recursive) {
+    if (watchChildrenModifications) {
         const possibleLazilyLoadedContainers = new Subject<HTMLElement>()
 
         const mutationObserver = new MutationObserver(mutations => {
@@ -107,10 +109,12 @@ export const findCodeViews = (codeHost: CodeHost, recursive = true) => (containe
             }
         })
 
-        mutationObserver.observe(document.body, {
-            childList: true,
-            subtree: true,
-        })
+        containers.subscribe(container =>
+            mutationObserver.observe(container, {
+                childList: true,
+                subtree: true,
+            })
+        )
 
         const lazilyLoadedCodeViews = possibleLazilyLoadedContainers.pipe(findCodeViews(codeHost, false))
 
@@ -118,7 +122,7 @@ export const findCodeViews = (codeHost: CodeHost, recursive = true) => (containe
     }
 
     return merge(...obs).pipe(
-        emitWhenIntersecting(),
+        emitWhenIntersecting(250),
         filter(({ codeView }) => !codeView.classList.contains('sg-mounted'))
     )
 }
